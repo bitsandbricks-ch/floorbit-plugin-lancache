@@ -3,6 +3,12 @@
 Each release has a section `## <version>`; its text becomes the GitHub release notes and the
 Marketplace's "what's new".
 
+## 1.0.3
+
+- Popular downloads name the game for a Steam depot that Floorbit's Applications page knows
+  (Traffic > Applications, the game's depots), instead of `depot <id>`. Unknown depots keep their id.
+  Nothing is looked up on the internet.
+
 ## 1.0.2
 
 - Shows its own icon in Floorbit's plugin list and Marketplace.

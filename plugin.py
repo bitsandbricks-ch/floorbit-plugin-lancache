@@ -20,6 +20,29 @@ def _dns():
     return current_app.extensions.get('floorbit_dns') if has_app_context() else None
 
 
+def depot_names(apps=None):
+    """{Steam depot id: game name} from Floorbit's applications (Traffic > Applications), where the
+    event or the built-in list gave a game its depots. No lookup on the internet."""
+    if apps is None:
+        try:
+            from floorbit import applications
+            apps = applications.active()
+        except Exception:  # noqa: BLE001  # an older Floorbit, or no app: the ids stay as they are
+            return {}
+    names = {}
+    for app in apps:
+        for depot in app.get('depots') or []:
+            names.setdefault(str(depot), app['name'])
+    return names
+
+
+def item_name(cache, item, names):
+    """What a player calls a download: the game for a known Steam depot, else the item itself."""
+    if cache == 'steam' and isinstance(item, str) and item.startswith('depot '):
+        return names.get(item[6:], item)
+    return item
+
+
 class Plugin(Base):
     def agent_stats(self, agent, payload):
         if not isinstance(payload, dict):
@@ -81,7 +104,7 @@ class Plugin(Base):
 
     def widget_downloads(self):
         page = overview(_stats(), None, hours=24)
-        items = [{'label': d['item'], 'value': f"{d['clients']} players", 'tone': ''} for d in page['downloads'][:8]]
+        items = [{'label': d['name'], 'value': f"{d['clients']} players", 'tone': ''} for d in page['downloads'][:8]]
         return {'type': 'list', 'items': items,
                 'sub': '' if items else 'Nothing downloaded by enough players yet.'}
 
@@ -94,9 +117,11 @@ def _state(check, stale):
     return 'up' if check.get('ok') else 'down'
 
 
-def overview(stats, health=None, hours=24, now=None):
-    """Everything the LAN cache page shows. Hall-wide numbers only."""
+def overview(stats, health=None, hours=24, now=None, names=None):
+    """Everything the LAN cache page shows. Hall-wide numbers only. ``names`` maps Steam depot ids
+    to games (depot_names())."""
     now = time.time() if now is None else now
+    names = depot_names() if names is None else names
     snap = stats.snapshot(hours=hours, now=now) if stats is not None else {'configured': False}
     agents = []
     downloads, suspects, services = {}, {}, {}
@@ -127,6 +152,8 @@ def overview(stats, health=None, hours=24, now=None):
             services[svc] = services.get(svc, 0) + n
         for h, n in (r.get('clients') or {}).items():
             clients[h] = clients.get(h, 0) + n
+    for row in (*downloads.values(), *suspects.values()):
+        row['name'] = item_name(row['cache'], row['item'], names)
     for d in downloads.values():
         total = d['hit_bytes'] + d['miss_bytes']
         d['hit_ratio'] = round(d['hit_bytes'] / total, 4) if total else None
